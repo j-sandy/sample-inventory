@@ -1,0 +1,105 @@
+name: PR API Callback
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  call_external_api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get PR Information
+        id: pr_info
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "HEAD_BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+          echo "REPO_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          echo "PR_BODY=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+
+      - name: Get PR Files and Diff
+        id: pr_files_diff
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr_number = ${{ github.event.pull_request.number }};
+
+            // Get files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number,
+            });
+
+            let changedFiles = files.map(file => file.filename).join('\n');
+            console.log('Changed Files:', changedFiles);
+            core.setOutput('changed_files', changedFiles);
+
+            // Get diff
+            const { data: diff } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number,
+              mediaType: {
+                format: 'diff'
+              }
+            });
+            console.log('Diff:', diff);
+            core.setOutput('pr_diff', diff);
+
+      - name: Call External API
+        id: api_call
+        run: |
+          # Placeholder for API call
+          # Replace with your actual API endpoint, method, body, and authentication
+          # Example using curl:
+          # curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
+          #      -d '{ "pr_number": "${{ steps.pr_info.outputs.PR_NUMBER }}", "head_branch": "${{ steps.pr_info.outputs.HEAD_BRANCH }}", "base_branch": "${{ steps.pr_info.outputs.BASE_BRANCH }}", "repo_url": "${{ steps.pr_info.outputs.REPO_URL }}", "changed_files": "${{ steps.pr_files_diff.outputs.changed_files }}", "pr_diff": "${{ steps.pr_files_diff.outputs.pr_diff }}" }' \
+          #      YOUR_API_ENDPOINT_URL
+          
+          # For demonstration, simulating an API response
+          echo "API_RESPONSE={\"status\":\"success\",\"message\":\"PR details processed\",\"pr_number\":\"${{ steps.pr_info.outputs.PR_NUMBER }}\"}" >> $GITHUB_OUTPUT
+          echo "API_STATUS=200" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR with details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const apiResponse = JSON.parse(`${{ steps.api_call.outputs.API_RESPONSE }}`);
+            const commentBody = `
+              ### PR API Callback Details
+
+              **PR Number:** ${{ steps.pr_info.outputs.PR_NUMBER }}
+              **Title:** ${{ steps.pr_info.outputs.PR_TITLE }}
+              **Head Branch:** ${{ steps.pr_info.outputs.HEAD_BRANCH }}
+              **Base Branch:** ${{ steps.pr_info.outputs.BASE_BRANCH }}
+              **Repository URL:** ${{ steps.pr_info.outputs.REPO_URL }}
+
+              #### Changed Files:
+              \`\`\`
+              ${{ steps.pr_files_diff.outputs.changed_files }}
+              \`\`\`
+
+              #### PR Diff:
+              \`\`\`diff
+              ${{ steps.pr_files_diff.outputs.pr_diff }}
+              \`\`\`
+
+              #### External API Response:
+              \`\`\`json
+              ${{ toJSON(apiResponse) }}
+              \`\`\`
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+
