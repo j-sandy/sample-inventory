@@ -1,103 +1,105 @@
-name: Source Code Security Scan
+iname: PR API Callback
+
 on:
-  push:
-    branches: [ dev, main ]
   pull_request:
-    branches: [ main, dev, stage ]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  security-scan:
+  call_external_api:
     runs-on: ubuntu-latest
     steps:
-    # Checkout the repository code
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        # Fetch all history for base branch detection
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Download the SSD Scanner CLI tool
-    - name: Download SSD Scanner CLI
-      run: |
-        curl -L -o ssd-scanner-cli https://github.com/OpsMx/ssd-scanner-cli-public/releases/download/v2025.08.45/ssd-scanner-cli-amd64
-        chmod +x ssd-scanner-cli
+      - name: Get PR Information
+        id: pr_info
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "HEAD_BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+          echo "REPO_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          echo "PR_BODY=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
 
-    # Run SSD Scanner with enhanced diff scan support
-    - name: Run SSD Scanner
-      id: ssd-scan
-      run: |
-        # Determine if this is a pull request and set appropriate flags
-        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          echo "Running diff-scan for Pull Request #${{ github.event.number }}"
-          ./ssd-scanner-cli --scanners=openssf \
-            --repository-url="${{ github.server_url }}/${{ github.repository }}" \
-            --source-code-path=. \
-            --build-id="${{ github.run_id }}" \
-            --branch="${{ github.head_ref }}" \
-            --upload-url="${{ secrets.SSD_UPLOAD_URL }}" \
-            --ssd-token="${{ secrets.TEAM_TOKEN }}" \
-            --pr-id="${{ github.event.number }}" \
-            --git-auth-type=token \
-            --git-auth-key="${{ secrets.GH_TOKEN }}" \
-            --interrupt-condition="all" \
-            --diff-scan="true" \
-            --interrupt-for-old-issues=true \
-            --keep-results=true \
-            --debug
-        else
-          echo "Running regular scan for push to ${{ github.ref_name }}"
-          ./ssd-scanner-cli --scanners=openssf \
-            --repository-url="${{ github.server_url }}/${{ github.repository }}" \
-            --source-code-path=. \
-            --build-id="${{ github.run_id }}" \
-            --branch="${{ github.ref_name }}" \
-            --upload-url="${{ secrets.SSD_UPLOAD_URL }}" \
-            --ssd-token="${{ secrets.TEAM_TOKEN }}" \
-            --keep-results=true \
-            --debug
-        fi
+      - name: Get PR Files and Diff
+        id: pr_files_diff
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr_number = ${{ github.event.pull_request.number }};
 
-    # Upload diff scan summary file (PR only)
-    - name: Upload Diff Scan Summary
-      uses: actions/upload-artifact@v4
-      if: github.event_name == 'pull_request' && always()
-      with:
-        name: diff-scan-summary-pr-${{ github.event.number }}
-        path: ~/.local/bin/ssd-scan-results/diff-scan-findings.json
-        retention-days: 90
-        if-no-files-found: warn
+            // Get files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number,
+            });
 
-    # Comment on PR with scan results summary
-    - name: Comment PR with Security Scan Results
-      if: github.event_name == 'pull_request' && always()
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GH_TOKEN }}
-        script: |
-          const { createPRComment } = require('./.github/scripts/pr-comment-script.js');
+            let changedFiles = files.map(file => file.filename).join('\n');
+            console.log('Changed Files:', changedFiles);
+            core.setOutput('changed_files', changedFiles);
+
+            // Get diff
+            const { data: diff } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number,
+              mediaType: {
+                format: 'diff'
+              }
+            });
+            console.log('Diff:', diff);
+            core.setOutput('pr_diff', diff);
+
+      - name: Call External API
+        id: api_call
+        run: |
+          # Placeholder for API call
+          # Replace with your actual API endpoint, method, body, and authentication
+          # Example using curl:
+          # curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${{ secrets.API_TOKEN }}" \
+          #      -d '{ "pr_number": "${{ steps.pr_info.outputs.PR_NUMBER }}", "head_branch": "${{ steps.pr_info.outputs.HEAD_BRANCH }}", "base_branch": "${{ steps.pr_info.outputs.BASE_BRANCH }}", "repo_url": "${{ steps.pr_info.outputs.REPO_URL }}", "changed_files": "${{ steps.pr_files_diff.outputs.changed_files }}", "pr_diff": "${{ steps.pr_files_diff.outputs.pr_diff }}" }' \
+          #      YOUR_API_ENDPOINT_URL
           
-          const secrets = {
-            GITHUB_SERVER_URL: '${{ github.server_url }}',
-            GITHUB_RUN_ID: '${{ github.run_id }}',
-            SSD_UPLOAD_URL: '${{ secrets.SSD_UPLOAD_URL }}'
-          };
-          
-          await createPRComment(github, context, secrets);
+          # For demonstration, simulating an API response
+          echo "API_RESPONSE={\"status\":\"success\",\"message\":\"PR details processed\",\"pr_number\":\"${{ steps.pr_info.outputs.PR_NUMBER }}\"}" >> $GITHUB_OUTPUT
+          echo "API_STATUS=200" >> $GITHUB_OUTPUT
 
-    # Show artifact information in workflow logs
-    - name: Show Artifact Info
-      if: github.event_name == 'pull_request' && always()
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GH_TOKEN }}
-        script: |
-          const { showArtifactInfo } = require('./.github/scripts/pr-comment-script.js');
-          
-          const secrets = {
-            GITHUB_SERVER_URL: '${{ github.server_url }}',
-            GITHUB_RUN_ID: '${{ github.run_id }}',
-            SSD_UPLOAD_URL: '${{ secrets.SSD_UPLOAD_URL }}'
-          };
-          
-          showArtifactInfo(context, secrets);
+      - name: Comment on PR with details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const apiResponse = JSON.parse(`${{ steps.api_call.outputs.API_RESPONSE }}`);
+            const commentBody = `
+              ### PR API Callback Details
+
+              **PR Number:** ${{ steps.pr_info.outputs.PR_NUMBER }}
+              **Title:** ${{ steps.pr_info.outputs.PR_TITLE }}
+              **Head Branch:** ${{ steps.pr_info.outputs.HEAD_BRANCH }}
+              **Base Branch:** ${{ steps.pr_info.outputs.BASE_BRANCH }}
+              **Repository URL:** ${{ steps.pr_info.outputs.REPO_URL }}
+
+              #### Changed Files:
+              \`\`\`
+              ${{ steps.pr_files_diff.outputs.changed_files }}
+              \`\`\`
+
+              #### PR Diff:
+              \`\`\`diff
+              ${{ steps.pr_files_diff.outputs.pr_diff }}
+              \`\`\`
+
+              #### External API Response:
+              \`\`\`json
+              ${{ toJSON(apiResponse) }}
+              \`\`\`
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
 
