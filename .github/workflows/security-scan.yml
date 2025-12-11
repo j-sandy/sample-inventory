@@ -11,34 +11,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Get PR Information
-        id: pr_info
-        run: |
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          echo "HEAD_BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
-          echo "REPO_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
-          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
-          echo "PR_BODY=${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
-          echo "PR_AUTHOR=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
-          echo "REPO_OWNER=${{ github.repository_owner }}" >> $GITHUB_OUTPUT
-
       - name: Call External API
         id: api_call
         run: |
           # Replace YOUR_API_ENDPOINT_URL with your actual API endpoint URL
           API_RESPONSE=$(curl -X POST -H "Content-Type: application/json" \
                -d '{
-                 "pr_number": "${{ steps.pr_info.outputs.PR_NUMBER }}",
-                 "head_branch": "${{ steps.pr_info.outputs.HEAD_BRANCH }}",
-                 "base_branch": "${{ steps.pr_info.outputs.BASE_BRANCH }}",
-                 "repo_url": "${{ steps.pr_info.outputs.REPO_URL }}",
-                 "pr_title": "${{ steps.pr_info.outputs.PR_TITLE }}",
-                 "pr_body": "${{ steps.pr_info.outputs.PR_BODY }}",
-                 "pr_author": "${{ steps.pr_info.outputs.PR_AUTHOR }}",
-                 "repo_owner": "${{ steps.pr_info.outputs.REPO_OWNER }}"
+                 "pr_number": "${{ github.event.pull_request.number }}",
+                 "head_branch": "${{ github.event.pull_request.head.ref }}",
+                 "base_branch": "${{ github.event.pull_request.base.ref }}",
+                 "repo_url": "${{ github.event.pull_request.html_url }}",
                }' \
-               http://35.208.167.152:6080)
+               https://ai-rem-dev-api.scanner.opsmx.org/webhooks/github/actions)
 
           echo "API_RESPONSE=$API_RESPONSE" >> $GITHUB_OUTPUT
 
@@ -65,15 +49,15 @@ jobs:
             const commentBody = `
               ### PR API Callback Details
 
-              **PR Number:** ${{ steps.pr_info.outputs.PR_NUMBER }}
-              **Title:** ${{ steps.pr_info.outputs.PR_TITLE }}
+              **PR Number:** ${{ github.event.pull_request.number }}
+              **Title:** ${{ github.event.pull_request.title }}
 
               #### Response from AI Guardian:
-              Message: ${{ steps.check_response.outputs.RES_MESSAGE }}
+              **Message:** ${{ steps.check_response.outputs.RES_MESSAGE }}
               
-              Status: ${{ steps.check_response.outputs.RES_STATUS }}
+              **Status:** ${{ steps.check_response.outputs.RES_STATUS }}
               
-              URL: ${{ steps.check_response.outputs.RES_URL }}
+              **URL:** ${{ steps.check_response.outputs.RES_URL }}
             `;
 
             github.rest.issues.createComment({
