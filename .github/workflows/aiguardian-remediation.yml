@@ -13,14 +13,19 @@ jobs:
 
       - name: Call External API
         id: api_call
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          REPO_URL: ${{ github.event.pull_request.html_url }}
         run: |
           # Replace YOUR_API_ENDPOINT_URL with your actual API endpoint URL
           API_RESPONSE=$(curl -X POST -H "Content-Type: application/json" \
                -d '{
-                 "pr_number": "${{ github.event.pull_request.number }}",
-                 "head_branch": "${{ github.event.pull_request.head.ref }}",
-                 "base_branch": "${{ github.event.pull_request.base.ref }}",
-                 "repo_url": "${{ github.event.pull_request.html_url }}"
+                 "pr_number": "$PR_NUMBER",
+                 "head_branch": "$HEAD_BRANCH",
+                 "base_branch": "$BASE_BRANCH",
+                 "repo_url": "$REPO_URL"
                }' \
                https://ai-rem-dev-api.scanner.opsmx.org/webhooks/github/actions)
 
@@ -42,22 +47,29 @@ jobs:
         id: comment_pr
         if: always()
         uses: actions/github-script@v7
+        env:
+          API_RESPONSE: ${{ steps.api_call.outputs.API_RESPONSE }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RES_MESSAGE: ${{ steps.check_response.outputs.RES_MESSAGE }}
+          RES_STATUS: ${{ steps.check_response.outputs.RES_STATUS }}
+          RES_URL: ${{ steps.check_response.outputs.RES_URL }}
         with:
           github-token: ${{ secrets.GH_TOKEN }}
           script: |
-            const apiResponse = JSON.parse('${{ steps.api_call.outputs.API_RESPONSE }}');
+            const apiResponse = JSON.parse('$API_RESPONSE');
             const commentBody = `
               ### PR API Callback Details
 
-              **PR Number:** ${{ github.event.pull_request.number }}
-              **Title:** ${{ github.event.pull_request.title }}
+              **PR Number:** $PR_NUMBER
+              **Title:** $PR_TITLE
 
               #### Response from AI Guardian:
-              **Message:** ${{ steps.check_response.outputs.RES_MESSAGE }}
+              **Message:** $RES_MESSAGE
               
-              **Status:** ${{ steps.check_response.outputs.RES_STATUS }}
+              **Status:** $RES_STATUS
               
-              **URL:** ${{ steps.check_response.outputs.RES_URL }}
+              **URL:** $RES_URL
             `;
 
             github.rest.issues.createComment({
