@@ -1,4 +1,4 @@
-name: PR API Callback V2
+name: PR Scan Remediation API Callback
 
 on:
   pull_request:
@@ -22,10 +22,10 @@ jobs:
           # Replace YOUR_API_ENDPOINT_URL with your actual API endpoint URL
           API_RESPONSE=$(curl -X POST -H "Content-Type: application/json" \
                -d '{
-                 "pr_number": "${{ github.event.pull_request.number }}",
-                 "head_branch": "${{ github.event.pull_request.head.ref }}",
-                 "base_branch": "${{ github.event.pull_request.base.ref }}",
-                 "repo_url": "${{ github.event.pull_request.html_url }}"
+                 "pr_number": "${PR_NUMBER}",
+                 "head_branch": "${HEAD_BRANCH}",
+                 "base_branch": "${BASE_BRANCH}",
+                 "repo_url": "${REPO_URL}"
                }' \
                https://ai-rem-dev-api.scanner.opsmx.org/webhooks/github/actions)
 
@@ -63,15 +63,15 @@ jobs:
             const commentBody = `
               ### PR API Callback Details
 
-              **PR Number:** $PR_NUMBER
-              **Title:** $PR_TITLE
+              **PR Number:** ${PR_NUMBER}
+              **Title:** ${PR_TITLE}
 
               #### Response from AI Guardian:
-              **Message:** $RES_MESSAGE
+              **Message:** ${RES_MESSAGE}
               
-              **Status:** $RES_STATUS
+              **Status:** ${RES_STATUS}
               
-              **URL:** $RES_URL
+              **URL:** ${RES_URL}
             `;
 
             github.rest.issues.createComment({
