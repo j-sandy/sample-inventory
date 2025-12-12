@@ -22,10 +22,10 @@ jobs:
           # Replace YOUR_API_ENDPOINT_URL with your actual API endpoint URL
           API_RESPONSE=$(curl -X POST -H "Content-Type: application/json" \
                -d '{
-                 "pr_number": "$PR_NUMBER",
-                 "head_branch": "$HEAD_BRANCH",
-                 "base_branch": "$BASE_BRANCH",
-                 "repo_url": "$REPO_URL"
+                 "pr_number": "${{ github.event.pull_request.number }}",
+                 "head_branch": "${{ github.event.pull_request.head.ref }}",
+                 "base_branch": "${{ github.event.pull_request.base.ref }}",
+                 "repo_url": "${{ github.event.pull_request.html_url }}"
                }' \
                https://ai-rem-dev-api.scanner.opsmx.org/webhooks/github/actions)
 
